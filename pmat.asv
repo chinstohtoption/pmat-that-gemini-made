@@ -1,0 +1,918 @@
+%% Based on code created by David J. Barker for Morales Laboratory
+% Beta Release 7-6-2018; Contact djamesbarker@gmail.com
+% Modified by Carissa A. Bruno for the Barker Lab at Rutgers University
+% 09-06-2019.
+%Updated By David J. Barker on 08-19-20 for bug fixes, to include external
+%import of CSV files, and to finalize before initial release.
+%
+% Merged with multi-event plotting logic on 10-17-2025 by Coding Partner.
+% Final version: Fixes all syntax/crash errors and uses robust event markers.
+
+function varargout = pmat(varargin)
+
+% PMAT MATLAB code for pmat.fig
+%      PMAT, by itself, creates a new PMAT or raises the existing
+%      singleton*.
+%
+%      H = PMAT returns the handle to a new PMAT or the handle to
+%      the existing singleton*.
+%
+%      PMAT('CALLBACK',hObject,eventData,handles,...) calls the local
+%      function named CALLBACK in PMAT.M with the given input arguments.
+%
+%      PMAT('Property','Value',...) creates a new PMAT or raises the
+%      existing singleton*.  Starting from the left, property value pairs are
+%      applied to the GUI before pmat_OpeningFcn gets called.  An
+%      unrecognized property name or invalid value makes property application
+%      stop.  All inputs are passed to pmat_OpeningFcn via varargin.
+%
+%      *See GUI Options on GUIDE's Tools menu.  Choose "GUI allows only one
+%      instance to run (singleton)".
+%
+% See also: GUIDE, GUIDATA, GUIHANDLES
+
+% Edit the above text to modify the response to help pmat
+
+% Last Modified by GUIDE v2.5 20-Aug-2020 22:48:04
+
+% Begin initialization code - DO NOT EDIT
+gui_Singleton = 1;
+gui_State = struct('gui_Name',       mfilename, ...
+                   'gui_Singleton',  gui_Singleton, ...
+                   'gui_OpeningFcn', @pmat_OpeningFcn, ...
+                   'gui_OutputFcn',  @pmat_OutputFcn, ...
+                   'gui_LayoutFcn',  [] , ...
+                   'gui_Callback',   []);
+if nargin && ischar(varargin{1})
+    gui_State.gui_Callback = str2func(varargin{1});
+end
+
+if nargout
+    [varargout{1:nargout}] = gui_mainfcn(gui_State, varargin{:});
+else
+    gui_mainfcn(gui_State, varargin{:});
+end
+% End initialization code - DO NOT EDIT
+
+%%FEATURES TO ADD:
+%%Ability for user to upload a spreadsheet with their data instead of a TDT Block.
+%%Stretch PETH option.
+
+% --- Executes just before pmat is made visible.
+function pmat_OpeningFcn(hObject, eventdata, handles, varargin)
+% --- START: VISUAL CHANGE FOR VERSION CONFIRMATION ---
+set(hObject, 'Name', 'pMAT v7.0 - FINAL WORKING VERSION'); % New Title
+% --- END: VISUAL CHANGE ---
+
+handles.output = hObject;
+
+% --- START: GUI MODIFICATION FOR MULTI-EVENT PLOTTING ---
+% Hide the old, static Ev1/Ev2 controls
+set([handles.Ev1Check, handles.Ev2Check, handles.PlotEv1PopUp, ...
+     handles.PlotEv2PopUp, handles.PlotEv1NameInput, handles.PlotEv2NameInput, ...
+     handles.EvExText], 'Visible', 'off');
+
+% Create a new label for the listbox
+uicontrol('Parent', handles.PlotPanel, 'Style', 'text', ...
+          'String', 'Select Events to Plot:', 'Tag', 'PlotEventLabel',...
+          'Position', [160, 165, 130, 15], ...
+          'HorizontalAlignment', 'left');
+
+% Create the new multi-select listbox for plotting events
+handles.PlotEventList = uicontrol('Parent', handles.PlotPanel, 'Style', 'listbox', ...
+                                  'String', {'(upload data first)'}, 'Tag', 'PlotEventList', ...
+                                  'Position', [160, 40, 130, 125], ...
+                                  'Min', 0, 'Max', 100, ... % Allow multiple selections
+                                  'Value', []); 
+% --- END: GUI MODIFICATION ---
+
+
+%Create arrays of related components to easily enable or disable GUI
+%buttons in groups:
+handles.PETHPanel = [handles.DeltaFCheck, handles.ZScoreCheck, handles.AUCDataCheck, ...
+    handles.AUCGraphCheck, handles.PETHContinueButton, handles.BinInput,handles.BinText handles.BL_StartInput, ...
+    handles.BL_WidthInput, handles.BLWidthText,handles.BLStartText, handles.PreInput, ...
+    handles.PostInput, handles.ZScoreCheck, handles.DeltaFCheck, handles.PreText, ...
+    handles.PostText, handles.PETHEventList, handles.BLStartText, handles.BLWidthText, ...
+    handles.AUCTable, handles.AUCGo, handles.AUCGraphToggle,handles.PETHNameInput, ...
+    handles.TrialTraceCheck,handles.TraceDataCheck];
+handles.DataExportPanel = [handles.Ca2DataCheck,handles.SelectedEventDataCheck,handles.EventDataCheck, ...
+    handles.ExportEventList,handles.OutputDataButton,handles.ExpSelectToggle,handles.TickTipText,handles.TickTipText2];
+
+handles.PlotPanel = [handles.PlotGCaMPCheck, handles.PlotControlCheck, ...
+    handles.PlotGCaMPCtrlCheck,handles.PlotGCaMPFitCtrlCheck, handles.PlotDeltaFCheck,...
+    handles.PlotDeltaFZScoreCheck, handles.PlotSaveButton, handles.PlotSelectToggle];
+handles.NamePrefixPanel = [handles.EditPrefix, handles.FileExample];
+
+handles.Checkboxes=["DeltaFCheck","ZScoreCheck","AUCDataCheck", ...
+    "AUCGraphCheck","Ca2DataCheck","SelectedEventDataCheck","EventDataCheck", ...
+    "PlotGCaMPCheck","PlotControlCheck", ...
+    "PlotGCaMPCtrlCheck","PlotGCaMPFitCtrlCheck","PlotDeltaFCheck",...
+    "PlotDeltaFZScoreCheck","TraceDataCheck","TrialTraceCheck"];
+handles.LastFold='C:\';
+
+%Most parts of the GUI are disabled before data is uploaded.
+set(handles.PETHPanel,'Enable','off');
+set(handles.PETHContinueButton,'Enable','off');
+set(handles.DataExportPanel, 'Enable','off');
+set(handles.PlotPanel, 'Enable', 'off');
+set(handles.NamePrefixPanel, 'Enable','off');
+
+
+%Set the default values:
+set(handles.FilePath, 'String', '');
+set(handles.EditPrefix,'String','');
+set(handles.PreInput,'String',"-5");
+set(handles.PostInput,'String',"10");
+set(handles.FileExample,'string','ex. Prefix_ControlPlot.jpg');
+set(handles.PETHNameInput,'String','ex. Shock, Tone, etc.');
+
+set(handles.BLStartText,'TooltipString','Sample Start Time: Time before raster to start taking the baseline.')
+set(handles.BL_StartInput,'TooltipString','Sample Start Time: Time before raster to start the baseline.')
+set(handles.BLWidthText,'TooltipString','Window Duration: Duration of the baseline.')
+set(handles.BL_WidthInput,'TooltipString','Window Duration: Duration of the baseline.')
+
+handles.startstop={-5.0,-2.5,[],[];0.0,2.5,[],[];5.0,7.5,[],[];[],[],[],[];[],[],[],[];[],[],[],[];[],[],[],[]};
+set(handles.AUCTable,'Data',handles.startstop);
+
+% --- START: VISUAL CHANGE FOR VERSION CONFIRMATION ---
+set(handles.RunAllButton,'BackgroundColor',[0.8 1 0.8]); % Light green
+uicontrol('Style','text','String','v7.0 - FINAL FIX',...
+    'Position',[5, 5, 100, 15], 'BackgroundColor', [1 0.6 0.6], 'FontWeight', 'bold'); % Red background
+% --- END: VISUAL CHANGE ---
+
+handles.MyGUI=gcf;
+guidata(hObject, handles);
+end
+
+% --- Outputs from this function are returned from the command line.
+function varargout = pmat_OutputFcn(hObject, eventdata, handles) 
+varargout{1} = handles.output;
+end
+
+function DataUploadButton_Callback(hObject, eventdata, handles)
+handles.data=[];handles.Ch490=[];handles.Ch405=[];
+handles.Fs=[];handles.Ts=[];handles.fields=[];
+handles.Beh=[];handles.epoclist=[];handles.fields=[];
+
+if isfield(handles,'LastFold')==0 || ~isfield(handles,'TDTFold');
+    handles.TDTFold=uigetdir ('C:\','Open TDT Block Folder');
+elseif isfield(handles,'CSVFold');
+    handles.TDTFold=uigetdir (handles.CSVFold,'Open TDT Block Folder');
+elseif handles.TDTFold==0;
+    handles.TDTFold=uigetdir ('C:\','Open TDT Block Folder');
+else
+    handles.TDTFold=uigetdir (handles.LastFold,'Open TDT Block Folder');
+end
+
+handles.LastFold=handles.TDTFold;
+if handles.TDTFold~=0
+    handles.DataType="Single";
+    cd(handles.TDTFold);
+    [Tank,Block,~]=fileparts(cd);
+    FileCheck=dir('*.tev');
+    if isempty(FileCheck)
+        msgbox("No .tev files found. Please select the directory containing your recording data", 'Error','warn')
+    else
+        disp(['Processing Block: ', Tank,'\',Block]);
+        set(gcf,'Pointer','watch');
+        drawnow;
+        handles.data=TDTbin2mat([Tank,'\',Block]);
+        set(gcf,'Pointer','arrow')
+        drawnow;
+    end
+    
+    prompt={'Add time buffer at start and end of streams for LED rise/fall. Number of samples to eliminate at start:', ...
+        'Number of samples to eliminate at end:'};
+    definput={'2000','2000'}; dlgtitle='Sample Buffer'; dims=[1 35];
+    BufferInput=inputdlg(prompt,dlgtitle,dims,definput);
+    if isempty(BufferInput)
+        BufferInput={'2000','2000'}; 
+    end
+    StartBuffer=str2double(BufferInput{1});
+    EndBuffer=str2double(BufferInput{2});
+    
+    handles.streamlist=fieldnames(handles.data.streams);
+    if isfield(handles.data.streams,'x490R')
+        handles.Fs=handles.data.streams.x490R.fs;
+        Ts=((1:numel(handles.data.streams.x490R.data(1,:))) /handles.Fs);
+        EndTime=length(handles.data.streams.x490R.data)-EndBuffer;
+        handles.Ts=Ts(StartBuffer:EndTime);
+        handles.Ch490=handles.data.streams.x490R.data(StartBuffer:EndTime);
+    else
+        [indx,tf]=listdlg('PromptString','Select your signal channel:','SelectionMode','single', ...
+            'ListString',handles.streamlist);
+        if tf==0
+            msgbox("You must select a signal channel to continue", 'Error','warn')
+            return
+        end
+        handles.Fs=handles.data.streams.(handles.streamlist{indx}).fs;
+        Ts=((1:numel(handles.data.streams.(handles.streamlist{indx}).data(1,:))) ...
+            /handles.Fs);
+        EndTime=length(handles.data.streams.(handles.streamlist{indx}).data)-EndBuffer;
+        handles.Ts=Ts(StartBuffer:EndTime);
+        handles.Ch490=handles.data.streams.(handles.streamlist{indx}).data(StartBuffer:EndTime);
+    end
+
+    if isfield(handles.data.streams,'x405R')
+        Ch405=handles.data.streams.x405R.data;
+        handles.Ch405=Ch405(StartBuffer:EndTime);
+    else
+        A=1:length(handles.streamlist);
+        if exist('indx', 'var') % Ensure indx exists from signal selection
+            B=setdiff(A,indx);
+        else
+            B = A;
+        end
+        [indx_ctrl,tf]=listdlg('PromptString','Select your control channel:','SelectionMode','single', ...
+            'ListString',handles.streamlist(B));
+        if tf==0
+           msgbox("You must select a control channel to continue", 'Error','warn')
+            return
+        end
+        indx_ctrl=B(indx_ctrl);
+        handles.Ch405=handles.data.streams.(handles.streamlist{indx_ctrl}).data(StartBuffer:EndTime);
+    end
+
+    handles.fields = fieldnames(handles.data.epocs);
+    handles.MasterArray=[];
+    for i=1:numel(handles.fields)
+            fieldlist=cell(numel(handles.data.epocs.(handles.fields{i}).data),1);
+            fieldlist(:)=handles.fields(i);
+            increment=[];
+            increment=diff(handles.data.epocs.(handles.fields{i}).data);
+            if ~isempty (increment)& increment(:,1)==ones(length(increment),1)
+                GroupData=questdlg([ 'The data in ' handles.fields{i} ' appear to belong to the same behavior. Would you like to group these data?'],...
+                    'Group Data','Yes');
+            else
+                GroupData='No';
+            end
+            
+            if strcmp(GroupData,'Yes')
+                epoclist=cell(numel(handles.data.epocs.(handles.fields{i}).data),1);
+                epoclist(:)=handles.fields(i);
+                handles.data.epocs.(handles.fields{i}).data=epoclist;
+                onset=cellfun(@num2str, num2cell(handles.data.epocs.(handles.fields{i}).onset),'un',0);
+                offset=cellfun(@num2str, num2cell(handles.data.epocs.(handles.fields{i}).offset),'un',0);
+                BehData.(handles.fields{i})=[epoclist onset offset];
+                handles.MasterArray= [handles.MasterArray; BehData.(handles.fields{i})];
+            elseif strcmp(GroupData,'No')
+                epoclist=cellfun(@num2str, num2cell(handles.data.epocs.(handles.fields{i}).data), 'un',0);
+                strs=strcat(fieldlist,epoclist);
+                handles.data.epocs.(handles.fields{i}).data=strs;
+                onset=cellfun(@num2str, num2cell(handles.data.epocs.(handles.fields{i}).onset),'un',0);
+                offset=cellfun(@num2str, num2cell(handles.data.epocs.(handles.fields{i}).offset),'un',0);
+                BehData.(handles.fields{i})=[handles.data.epocs.(handles.fields{i}).data onset offset];
+                handles.MasterArray=[handles.MasterArray; BehData.(handles.fields{i})];
+            elseif strcmp(GroupData,'Cancel')
+                msgbox("Importing of data has been cancelled", 'Error','warn')
+                break
+            end
+    end
+    
+    handles.BitListStr=cellstr(string(unique(handles.MasterArray(:,1))));
+    set(handles.PETHEventList,'String',handles.BitListStr);
+    set(handles.ExportEventList,'String',handles.BitListStr);
+    set(handles.PlotEventList,'String',handles.BitListStr, 'Value', []); % Clear selection
+    
+    set(handles.FilePath,'String', handles.TDTFold);
+    set(handles.PETHPanel,'Enable','on');
+    set(handles.PlotPanel,'Enable','on');
+    set(handles.DataExportPanel,'Enable','on');
+    set(handles.NamePrefixPanel,'Enable','on');
+    set(handles.CopyFilePath,'Enable','on');
+    set(handles.RunAllButton,'Enable','on');
+    set(handles.CloseAll,'Enable','on');
+    set(handles.AUCGraphCheck,'Enable','on');
+    handles.UserPrefix={};
+    set(handles.EditPrefix,'String','');
+    set(handles.FileExample,'string','ex. Prefix_ControlPlot.jpg');
+    set(handles.PETHNameInput,'String','ex. Shock, Tone, etc.');
+    handles.subjectID=[];
+else
+    msgbox("Please select a TDT data block folder to continue.", 'Error','warn')
+end
+guidata(hObject,handles);
+end
+
+% --- Executes on button press in PlotSaveButton.
+function PlotSaveButton_Callback(hObject, eventdata, handles)
+handles.MyGUI=gcf;
+set(handles.MyGUI,'Pointer','watch')
+drawnow;
+
+if get(handles.PlotGCaMPCheck,'value')==0 && get(handles.PlotControlCheck,'value')==0 ...
+        && get(handles.PlotGCaMPCtrlCheck,'value')==0 && get(handles.PlotGCaMPFitCtrlCheck,'value')==0 ...
+        && get(handles.PlotDeltaFCheck,'value')==0 && get(handles.PlotDeltaFZScoreCheck,'value')==0
+    msgbox('Please select at least one.', 'Error','warn');
+end
+
+if get(handles.PlotGCaMPCheck,'value')==1
+    figure;
+    plot(handles.Ts,handles.Ch490);hold on;
+    xlim([handles.Ts(1) handles.Ts(end)]);
+    xlabel('Time (seconds)');
+    title('Signal Channel Recording');
+    FastPrintv2(handles.UserPrefix,'SignalChannel');
+    hold off;
+end
+
+if get(handles.PlotControlCheck,'value')==1
+    figure
+    plot(handles.Ts,handles.Ch405)
+    xlim([handles.Ts(1) handles.Ts(end)]);
+    title('Control Recording');
+    xlabel('Time (seconds)');
+    FastPrintv2(handles.UserPrefix,'ControlPlot');
+end
+
+if get(handles.PlotGCaMPCtrlCheck, 'value')==1
+    figure;
+    plot(handles.Ts,handles.Ch490);
+    hold on
+    plot(handles.Ts,handles.Ch405);
+    xlim([handles.Ts(1) handles.Ts(end)]);
+    xlabel('Time (seconds)');
+    title('Signal vs Control');
+    FastPrintv2(handles.UserPrefix,'Ch490Plus405Data');
+end
+
+if get(handles.PlotGCaMPFitCtrlCheck,'value')==1
+    figure;
+    F490=smooth(handles.Ch490,0.002,'lowess'); 
+    F405=smooth(handles.Ch405,0.002,'lowess');
+    bls=polyfit(F405(1:end),F490(1:end),1);
+    Y_Fit=bls(1).*F405+bls(2);
+    plot(handles.Ts,handles.Ch490);
+    hold on;
+    plot(handles.Ts, Y_Fit);
+    xlim([handles.Ts(1) handles.Ts(end)]);
+    xlabel('Time (seconds)');
+    title('Signal vs Fitted Control');
+    FastPrintv2(handles.UserPrefix,'SignalvsFitCtrl');
+end
+
+% --- START: FINAL ROBUST PLOTTING LOGIC FOR DELTA F/F ---
+if get(handles.PlotDeltaFCheck,'value') == 1
+    selected_indices = get(handles.PlotEventList, 'Value');
+    all_event_names = get(handles.PlotEventList, 'String');
+    if ischar(all_event_names), all_event_names = {all_event_names}; end
+    
+    F490 = smooth(handles.Ch490, 0.002, 'lowess');
+    F405 = smooth(handles.Ch405, 0.002, 'lowess');
+    bls = polyfit(F405(:), F490(:), 1);
+    Y_Fit = bls(1).*F405 + bls(2);
+    Delta490 = (F490(:) - Y_Fit(:)) ./ Y_Fit(:);
+    
+    fig = figure('Color','w');
+    ax = axes('Parent', fig);
+    
+    legend_handles = gobjects(0);
+    legend_labels = {};
+    
+    h_signal = plot(ax, handles.Ts, Delta490 .* 100, 'k', 'LineWidth', 1.2);
+    hold(ax, 'on');
+    legend_handles(end+1) = h_signal;
+    legend_labels{end+1} = '% \DeltaF/F';
+
+    if ~isempty(selected_indices) && ~strcmp(all_event_names{1}, '(upload data first)')
+        eventsToPlot = all_event_names(selected_indices);
+        colors = lines(numel(eventsToPlot));
+        
+        for i = 1:numel(eventsToPlot)
+            currentEventCode = eventsToPlot{i};
+            
+            rows = strcmp(string(handles.MasterArray(:,1)), currentEventCode);
+            onsets = str2double(handles.MasterArray(rows, 2));
+            onsets(isnan(onsets)) = [];
+            
+            event_x_coords = [];
+            event_y_coords = [];
+            for k = 1:length(onsets)
+                [~, idx] = min(abs(handles.Ts - onsets(k)));
+                if ~isempty(idx)
+                    event_x_coords(end+1) = handles.Ts(idx);
+                    event_y_coords(end+1) = (Delta490(idx) * 100);
+                end
+            end
+            
+            if ~isempty(event_x_coords)
+                scatter(ax, event_x_coords, event_y_coords, 36, colors(i,:), 'filled', 'MarkerEdgeColor', 'k', 'HandleVisibility', 'off');
+            end
+
+            h_leg = scatter(ax, nan, nan, 36, colors(i,:), 'filled', 'MarkerEdgeColor', 'k');
+            legend_handles(end+1) = h_leg;
+            legend_labels{end+1} = strrep(currentEventCode, '_', ' ');
+        end
+        legend(legend_handles, legend_labels, 'Interpreter', 'none', 'Location', 'eastoutside');
+    end
+    
+    hold(ax, 'off');
+    xlim(ax, [handles.Ts(1) handles.Ts(end)]);
+    ylabel(ax, '% \Delta F/F');
+    xlabel(ax, 'Time (Seconds)');
+    title(ax, '\Delta F/F for Recording');
+    
+    FastPrintv2(handles.UserPrefix, 'WholeSessionTrace_dFF');
+end
+% --- END: FINAL ROBUST PLOTTING LOGIC ---
+
+% --- START: FINAL ROBUST PLOTTING LOGIC FOR Z-SCORE ---
+if get(handles.PlotDeltaFZScoreCheck,'value') == 1
+    selected_indices = get(handles.PlotEventList, 'Value');
+    all_event_names = get(handles.PlotEventList, 'String');
+    if ischar(all_event_names), all_event_names = {all_event_names}; end
+
+    F490 = smooth(handles.Ch490, 0.002, 'lowess');
+    F405 = smooth(handles.Ch405, 0.002, 'lowess');
+    bls = polyfit(F405(:), F490(:), 1);
+    Y_Fit = bls(1).*F405 + bls(2);
+    Delta490 = (F490(:) - Y_Fit(:)) ./ Y_Fit(:);
+    zDelta490 = zscore(Delta490);
+    
+    fig = figure('Color','w');
+    ax = axes('Parent', fig);
+    
+    legend_handles = gobjects(0);
+    legend_labels = {};
+    
+    h_signal = plot(ax, handles.Ts, zDelta490, 'k', 'LineWidth', 1.2);
+    hold(ax, 'on');
+    legend_handles(end+1) = h_signal;
+    legend_labels{end+1} = 'Z-Score';
+
+    if ~isempty(selected_indices) && ~strcmp(all_event_names{1}, '(upload data first)')
+        eventsToPlot = all_event_names(selected_indices);
+        colors = lines(numel(eventsToPlot));
+        
+        for i = 1:numel(eventsToPlot)
+            currentEventCode = eventsToPlot{i};
+            
+            rows = strcmp(string(handles.MasterArray(:,1)), currentEventCode);
+            onsets = str2double(handles.MasterArray(rows, 2));
+            onsets(isnan(onsets)) = [];
+            
+            event_x_coords = [];
+            event_y_coords = [];
+            for k = 1:length(onsets)
+                [~, idx] = min(abs(handles.Ts - onsets(k)));
+                if ~isempty(idx)
+                    event_x_coords(end+1) = handles.Ts(idx);
+                    event_y_coords(end+1) = zDelta490(idx);
+                end
+            end
+            
+            if ~isempty(event_x_coords)
+                scatter(ax, event_x_coords, event_y_coords, 36, colors(i,:), 'filled', 'MarkerEdgeColor', 'k', 'HandleVisibility', 'off');
+            end
+            
+            h_leg = scatter(ax, nan, nan, 36, colors(i,:), 'filled', 'MarkerEdgeColor', 'k');
+            legend_handles(end+1) = h_leg;
+            legend_labels{end+1} = strrep(currentEventCode, '_', ' ');
+        end
+        legend(legend_handles, legend_labels, 'Interpreter', 'none', 'Location', 'eastoutside');
+    end
+
+    hold(ax, 'off');
+    xlim(ax, [handles.Ts(1) handles.Ts(end)]);
+    ylabel(ax, 'Normalized \Delta F/F (z-score)');
+    xlabel(ax, 'Time (Seconds)');
+    title(ax, 'Normalized \Delta F/F for Recording');
+    
+    FastPrintv2(handles.UserPrefix, 'WholeSessionTrace_ZScore');
+end
+% --- END: FINAL ROBUST PLOTTING LOGIC ---
+
+f = msgbox('The files have been saved in the working directory under the figures folder.','Save Successful!');
+set(handles.MyGUI,'Pointer','arrow')
+drawnow;
+guidata(hObject,handles)
+end
+
+% [ The rest of the script remains identical ]
+% ...
+% --- Executes on button press in PlotSelectToggle.
+function PlotSelectToggle_Callback(hObject, eventdata, handles)
+if get(handles.PlotSelectToggle, 'value')==1
+    set(handles.PlotGCaMPCheck,'value',1);
+    set(handles.PlotControlCheck,'value',1);
+    set(handles.PlotGCaMPCtrlCheck,'value',1);
+    set(handles.PlotGCaMPFitCtrlCheck,'value',1);
+    set(handles.PlotDeltaFCheck,'value',1);
+    set(handles.PlotDeltaFZScoreCheck,'value',1);
+else
+    set(handles.PlotGCaMPCheck,'value',0);
+    set(handles.PlotControlCheck,'value',0);
+    set(handles.PlotGCaMPCtrlCheck,'value',0);
+    set(handles.PlotGCaMPFitCtrlCheck,'value',0);
+    set(handles.PlotDeltaFCheck,'value',0);
+    set(handles.PlotDeltaFZScoreCheck,'value',0);
+end
+guidata(hObject,handles);
+end
+
+% --- Executes during object creation, after setting all properties.
+function TickTipText2_CreateFcn(hObject, eventdata, handles)
+end
+
+% --- Executes during object creation, after setting all properties.
+function TickTipText_CreateFcn(hObject, eventdata, handles)
+end
+
+
+%% ACU and PETH Panel
+
+% --- Executes on selection change in PETHEventList.
+function PETHEventList_Callback(hObject, eventdata, handles)
+contents=cellstr(get(hObject,'String'));
+handles.PETHListSelection = contents{get(hObject, 'Value')};
+guidata(hObject,handles);
+end
+
+% --- Executes during object creation, after setting all properties.
+function PETHEventList_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+end
+
+function PreInput_Callback(hObject, eventdata, handles)
+handles.PreInput.String = get(hObject,'String');
+guidata(hObject,handles);
+end
+
+% --- Executes during object creation, after setting all properties.
+function PreInput_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+end
+
+function PostInput_Callback(hObject, eventdata, handles)
+handles.PostInput.String = get(hObject,'String');
+guidata(hObject,handles);
+end
+
+% --- Executes during object creation, after setting all properties.
+function PostInput_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+end
+
+function BL_WidthInput_Callback(hObject, eventdata, handles)
+handles.BL_WidthInput.String=get(hObject,'String');
+guidata(hObject,handles);
+end
+
+% --- Executes during object creation, after setting all properties.
+function BL_WidthInput_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+end
+
+function BL_StartInput_Callback(hObject, eventdata, handles)
+handles.BL_StartInput.String = get(hObject,'String');
+guidata(hObject,handles);
+end
+
+% --- Executes during object creation, after setting all properties.
+function BL_StartInput_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+end
+
+function BinInput_Callback(hObject, eventdata, handles)
+handles.BinInput.String=get(hObject,'String');
+guidata(hObject,handles);
+end
+
+% --- Executes during object creation, after setting all properties.
+function BinInput_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+end
+
+% --- Executes on button press in AUCDataCheck.
+function AUCDataCheck_Callback(hObject, eventdata, handles)
+guidata(hObject,handles);
+end
+
+% --- Executes on button press in AUCGraphCheck.
+function AUCGraphCheck_Callback(hObject, eventdata, handles)
+guidata(hObject,handles);
+end
+
+% --- Executes on button press in ZScoreCheck.
+function ZScoreCheck_Callback(hObject, eventdata, handles)
+guidata(hObject,handles);
+end
+
+% --- Executes on button press in DeltaFCheck.
+function DeltaFCheck_Callback(hObject, eventdata, handles)
+guidata(hObject,handles);
+end
+
+% --- Executes on button press in AUCGraphToggle.
+function AUCGraphToggle_Callback(hObject, eventdata, handles)
+if get(handles.AUCGraphToggle, 'value')==1
+    set(handles.AUCDataCheck,'value',1);
+    set(handles.AUCGraphCheck,'value',1);
+    set(handles.ZScoreCheck,'value',1);
+    set(handles.DeltaFCheck,'value',1);
+    set(handles.TrialTraceCheck,'value',1);
+    set(handles.TraceDataCheck,'value',1);
+else
+    set(handles.AUCDataCheck,'value',0);
+    set(handles.AUCGraphCheck,'value',0);
+    set(handles.ZScoreCheck,'value',0);
+    set(handles.DeltaFCheck,'value',0);
+    set(handles.TrialTraceCheck,'value',0);
+    set(handles.TraceDataCheck,'value',0);
+end
+guidata(hObject,handles)
+end
+
+% --- Executes when entered data in editable cell(s) in AUCTable.
+function AUCTable_CellEditCallback(hObject, eventdata, handles)
+for i=1:6
+    if isnan(handles.AUCTable.Data{i,1})==1
+        handles.AUCTable.Data{i,1}=[];end
+    if isnan(handles.AUCTable.Data{i,2})==1
+        handles.AUCTable.Data{i,2}=[];end
+end
+guidata(hObject,handles)
+end
+
+% --- Executes on button press in AUCGo.
+function AUCGo_Callback(hObject, eventdata, handles)
+if (isempty(handles.PreInput.String))
+    set(handles.PreInput,'String','-5'); end
+if (isempty(handles.PostInput.String))
+    set(handles.PostInput,'String','10'); end
+if (isempty(handles.BL_WidthInput.String))
+    set(handles.BL_WidthInput,'String',"5"); end
+if (isempty(handles.BL_StartInput.String))
+    set(handles.BL_StartInput,'String',"-5"); end
+if (isempty(handles.BinInput.String))
+    set(handles.BinInput,'String',"100"); end
+
+Pre=str2double(handles.PreInput.String);
+if Pre < 0, Pre = abs(Pre); end
+Post=str2double(handles.PostInput.String);
+if Post < 0, Post = abs(Post); set(handles.PostInput,'String',Post); msgbox('Please enter a positive post-event time.','Error','warn'); pause; end
+BL_Width=str2double(handles.BL_WidthInput.String);
+BL_Start=abs(str2double(handles.BL_StartInput.String));
+Bin=str2double(handles.BinInput.String);
+    
+if isfield(handles,'PETHListSelection')
+   PETHEventStr=string(handles.PETHListSelection);
+else
+   PETHEventStr=string(handles.BitListStr{1});
+end
+if ~isnumeric(handles.MasterArray{2,1})
+    EventTS=str2double(handles.MasterArray(handles.MasterArray(:,1)==PETHEventStr,2));
+else
+    EventTS=cell2mat(handles.MasterArray(handles.MasterArray(:,1)==PETHEventStr,2));
+end
+if all(isnan(EventTS)), EventTS=cell2mat(handles.MasterArray(handles.MasterArray(:,1)==PETHEventStr,2)); end
+    
+[ToneTrace, ~]=TrialPETHAUC( handles.Fs, handles.Ts, Pre, Post, EventTS,handles.Ch490,handles.Ch405, 'AUC',Bin,0,5, BL_Width,BL_Start );
+
+AUC=[]; MaxValue=[];
+for i=1:6
+    if ~isempty(handles.AUCTable.Data{i,1}) & ~isempty(handles.AUCTable.Data{i,2})
+        if handles.AUCTable.Data{i,1}>=handles.AUCTable.Data{i,2}
+            msgbox('End time must be a larger value than start time.','Error','warn');
+        else
+            if handles.AUCTable.Data{i,1} > Post || handles.AUCTable.Data{i,1} < str2double(handles.PreInput.String) ...
+                    || handles.AUCTable.Data{i,2} > Post || handles.AUCTable.Data{i,2} < str2double(handles.PreInput.String)
+                msgbox('Start/end time entered outside of pre/post event range.','Error','warn');
+            end
+            str1=strjoin(['start' string(i)],'');
+            str2=strjoin(['end' string(i)],'');
+            handles.(str1)=handles.AUCTable.Data{i,1};
+            handles.(str2)=handles.AUCTable.Data{i,2};
+            AUC(1,i)=trapz(ToneTrace(ToneTrace(:,1)>=handles.(str1) & ToneTrace(:,1)<= handles.(str2),2));
+            MaxValue(1,i)=max(ToneTrace(ToneTrace(:,1)>=handles.(str1) & ToneTrace(:,1)<= handles.(str2),2));
+            handles.AUCTable.Data{i,3}=AUC(1,i);
+            handles.AUCTable.Data{i,4}=MaxValue(1,i);
+        end
+    end
+end
+guidata(hObject,handles)
+end
+
+function PETHContinueButton_Callback(hObject, eventdata, handles)
+% ... (This entire function is unchanged)
+if isempty(handles.PreInput.String), set(handles.PreInput,'String','-5'); end
+if isempty(handles.PostInput.String), set(handles.PostInput,'String','10'); end
+if isempty(handles.BL_WidthInput.String), set(handles.BL_WidthInput,'String',"5"); end
+if isempty(handles.BL_StartInput.String), set(handles.BL_StartInput,'String',"-5"); end
+if isempty(handles.BinInput.String), set(handles.BinInput,'String',"100"); end
+    
+if get(handles.ZScoreCheck,'value')==0 && get(handles.DeltaFCheck,'value')==0 && get(handles.AUCDataCheck,'value')==0 && get(handles.AUCGraphCheck,'value')==0 && get(handles.TrialTraceCheck,'value')==0 && get(handles.TraceDataCheck,'value')==0
+    msgbox('Please select at least one.', 'Error','warn');
+else
+    Pre=str2double(handles.PreInput.String);
+    if Pre < 0, Pre = abs(Pre); end
+    Post=str2double(handles.PostInput.String);
+    if Post < 0, Post = abs(Post); set(handles.PostInput,'String',Post); msgbox('Please enter a positive post-event time.','Error','warn'); pause; end
+    BL_Width=str2double(handles.BL_WidthInput.String);
+    BL_Start=abs(str2double(handles.BL_StartInput.String));
+    Bin=str2double(handles.BinInput.String);
+    
+    if isfield(handles,'PETHListSelection')
+        PETHEventStr=string(handles.PETHListSelection);
+    else
+        PETHEventStr=string(handles.BitListStr{1});
+    end
+
+    if ~isnumeric(handles.MasterArray{2,1})
+        EventTS=str2double(handles.MasterArray(handles.MasterArray(:,1)==PETHEventStr,2));
+    else
+        EventTS=cell2mat(handles.MasterArray(handles.MasterArray(:,1)==PETHEventStr,2));
+    end
+    if all(isnan(EventTS)), EventTS=cell2mat(handles.MasterArray(handles.MasterArray(:,1)==PETHEventStr,2)); end
+    
+    if isempty(handles.PETHNameInput.String) || strcmp(handles.PETHNameInput.String, "ex. Shock, Tone, etc.")
+        PETHName=PETHEventStr;
+    else
+        PETHName=handles.PETHNameInput.String;
+    end
+    prefix = strjoin([string(handles.UserPrefix),'_', string(PETHName)],'');
+    
+    if get(handles.ZScoreCheck,'value') == 1, FigTitle= strjoin([string(PETHName),' Z-Score PETH']); TrialPETHZScore(handles.Fs, handles.Ts, Pre, Post, EventTS, handles.Ch490, handles.Ch405, prefix,FigTitle,Bin,0,5, BL_Width, BL_Start); end
+    if get(handles.DeltaFCheck,'value') == 1, FigTitle=strjoin([string(PETHName),' Delta F PETH']); TrialPETHDeltaF(handles.Fs, handles.Ts, Pre, Post, EventTS, handles.Ch490, handles.Ch405, prefix,FigTitle,Bin,0,5, BL_Width, BL_Start); end
+    
+    if get(handles.AUCGraphCheck,'value')==1, [ToneTrace]=AUCPeak( handles.Fs, handles.Ts, Pre, Post, EventTS,handles.Ch490,handles.Ch405, 'AUC',Bin,0,5, BL_Width,BL_Start ); AUC=[]; MaxValue=[]; breakdown=[]; xlabels={}; for i=1:6, if ~isempty(handles.AUCTable.Data{i,1}) && ~isempty(handles.AUCTable.Data{i,2}), if handles.AUCTable.Data{i,1}>=handles.AUCTable.Data{i,2}, msgbox('End time must be a larger value than start time.','Error','warn'); breakdown=1; else, xlabels{i}=strjoin([string(handles.AUCTable.Data{i,1}), "s to", string(handles.AUCTable.Data{i,2}),"s"]); str1=strjoin(['start' string(i)],''); str2=strjoin(['end' string(i)],''); handles.(str1)=handles.AUCTable.Data{i,1}; handles.(str2)=handles.AUCTable.Data{i,2}; AUC(1,i)=trapz(ToneTrace(ToneTrace(:,1)>=handles.(str1) & ToneTrace(:,1)<= handles.(str2),2)); MaxValue(1,i)=max(ToneTrace(ToneTrace(:,1)>=handles.(str1) & ToneTrace(:,1)<= handles.(str2),2)); handles.AUCTable.Data{i,3}=AUC(1,i); handles.AUCTable.Data{i,4}=MaxValue(1,i); end, end, end, if isempty(breakdown), if isempty(handles.PETHNameInput.String) || strcmp(handles.PETHNameInput.String, "ex. Shock, Tone, etc."), Title=PETHEventStr; else, Title=get(handles.PETHNameInput,'String'); end, figure; bar(AUC); set(gca,'xticklabel',xlabels); title(strjoin(["Area under the curve (AUC) (",Title,")"]),'Interpreter','none'); FastPrintv2(prefix,'AUC'); figure; bar(MaxValue); set(gca,'xticklabel',xlabels); title(strjoin(["Peak Value (",Title,")"]),'Interpreter','none'); FastPrintv2(prefix,'MaxValue'); end, end
+    if get(handles.AUCDataCheck,'value')==1, [ToneTrace]=AUCPeak( handles.Fs, handles.Ts, Pre, Post, EventTS,handles.Ch490,handles.Ch405, 'AUC',Bin,0,5, BL_Width,BL_Start ); AUC=[]; MaxValue=[]; breakdown=[]; for i=1:6, if ~isempty(handles.AUCTable.Data{i,1}) && ~isempty(handles.AUCTable.Data{i,2}), if handles.AUCTable.Data{i,1}>=handles.AUCTable.Data{i,2}, msgbox('End time must be a larger value than start time.','Error','warn'); breakdown=1; else, str1=strjoin(['start' string(i)],''); str2=strjoin(['end' string(i)],''); handles.(str1)=handles.AUCTable.Data{i,1}; handles.(str2)=handles.AUCTable.Data{i,2}; AUC(1,i)=trapz(ToneTrace(ToneTrace(:,1)>=handles.(str1) & ToneTrace(:,1)<= handles.(str2),2)); MaxValue(1,i)=max(ToneTrace(ToneTrace(:,1)>=handles.(str1) & ToneTrace(:,1)<= handles.(str2),2)); handles.AUCTable.Data{i,3}=AUC(1,i); handles.AUCTable.Data{i,4}=MaxValue(1,i); end, end, end, if isempty(breakdown), T=cell2table(handles.AUCTable.Data); T.Properties.VariableNames={'Start','End','AUC','MaxValue'}; if ~isfolder('Data'), mkdir('Data'); end, newname=strjoin([handles.UserPrefix,'_',PETHEventStr,'_AUCData','.csv'],''); a = fullfile(cd,'Data'); fullName=fullfile(a,newname); i=1; while exist(fullName,'file'), newname=strjoin([handles.UserPrefix,'_',PETHEventStr,'_AUCData',string(i),'.csv'],''); fullName=fullfile(a,newname); i=i+1; end, writetable(T,fullName); end, end
+    if get(handles.TrialTraceCheck,'value')==1 || get(handles.TraceDataCheck,'value')==1, [FinalData, TrialData] = TrialPETHTrace(handles.Fs, handles.Ts, Pre, Post, EventTS,handles.Ch490,handles.Ch405,'-',Bin,0,5, BL_Width, BL_Start); if get(handles.TrialTraceCheck,'value')==1, T=table(TrialData); if ~isfolder('Data'), mkdir('Data'); end, newname=strjoin([handles.UserPrefix,'_',PETHEventStr,'_TrialTraceData','.csv'],''); a = fullfile(cd,'Data'); fullName=fullfile(a,newname); i=1; while exist(fullName,'file'), newname=strjoin([handles.UserPrefix,'_',PETHEventStr,'_TrialTraceData',string(i),'.csv'],''); fullName=fullfile(a,newname); i=i+1; end, writetable(T,fullName); end, if get(handles.TraceDataCheck,'value')==1, tmp=[FinalData]; Columns=["TimeStamp","Z-Score","DeltaF/F"]; tmp2=cellstr([Columns; tmp]); T=table(tmp2); if ~isfolder('Data'), mkdir('Data'); end, newname=strjoin([handles.UserPrefix,'_',PETHEventStr,'_AverageTraceData','.csv'],''); a=fullfile(cd,'Data'); fullName=fullfile(a,newname); i=1; while exist(fullName,'file'), newname=strjoin([handles.UserPrefix,'_',PETHEventStr,'_AverageTraceData',string(i),'.csv'],''); fullName=fullfile(a,newname); i=i+1; end, writetable(T,fullName,'WriteVariableNames',false); end, end
+end
+guidata(hObject,handles);
+end
+% --- Executes on button press in PlotDeltaFZScoreCheck.
+function PlotDeltaFZScoreCheck_Callback(hObject, eventdata, handles)
+guidata(hObject,handles)
+end
+% --- Executes on button press in RunAllButton.
+function RunAllButton_Callback(hObject, eventdata, handles)
+if handles.DataType=="Single" 
+    if get(handles.Ca2DataCheck,'value') + get(handles.EventDataCheck,'value') + get(handles.SelectedEventDataCheck,'value') >=1, OutputDataButton_Callback(hObject,eventdata,handles); end
+    if get(handles.PlotGCaMPCheck,'value') + get(handles.PlotControlCheck,'value') + get(handles.PlotGCaMPCtrlCheck,'value') + get(handles.PlotGCaMPFitCtrlCheck,'value') + get(handles.PlotDeltaFCheck,'value') +get(handles.PlotDeltaFZScoreCheck,'value') >=1, PlotSaveButton_Callback(hObject,eventdata,handles); end
+    if get(handles.ZScoreCheck,'value') + get(handles.DeltaFCheck,'value') + get(handles.AUCDataCheck,'value') + get(handles.AUCGraphCheck,'value') >=1, PETHContinueButton_Callback(hObject,eventdata,handles); end
+end
+if handles.DataType=="Batch"
+    for s=1:length(handles.Subjects)
+        cd(handles.GroupFold); cd(handles.Subjects(s).folder);
+        handles.subjectID=strtok(handles.Subjects(s).name,'-');
+        [Tank,Block,~]=fileparts(cd);
+        disp(['Processing Block: ', Tank,'\',Block]);
+        handles.data=TDTbin2mat([Tank,'\',Block]);
+        handles.streamlist=fieldnames(handles.data.streams);
+        if isfield(handles.data.streams,'x490R'), Ts=((1:numel(handles.data.streams.x490R.data(1,:))) /handles.data.streams.x490R.fs); Ch490=handles.data.streams.x490R.data; EndTime=length(Ch490)-handles.EndBuffer; handles.Fs=handles.data.streams.x490R.fs; handles.Ts=Ts(handles.StartBuffer:EndTime); handles.Ch490=Ch490(handles.StartBuffer:EndTime);
+        elseif isfield(handles, 'Ch490indx') && ~isempty(handles.Ch490indx), indx=handles.Ch490indx; Ts=((1:numel(handles.data.streams.(handles.streamlist{indx}).data(1,:))) /handles.data.streams.(handles.streamlist{indx}).fs); Ch490=handles.data.streams.(handles.streamlist{indx}).data; EndTime=length(Ch490)-handles.EndBuffer; handles.Fs=handles.data.streams.(handles.streamlist{indx}).fs; handles.Ts=Ts(handles.StartBuffer:EndTime); handles.Ch490=Ch490(handles.StartBuffer:EndTime);
+        else, [indx,tf]=listdlg('PromptString','Select your Signal channel:','SelectionMode','single','ListString',handles.streamlist); while tf==0, [indx,tf]=listdlg('PromptString','Select your Signal channel:','SelectionMode','single','ListString',handles.streamlist); end, handles.Ch490indx=indx; Ts=((1:numel(handles.data.streams.(handles.streamlist{indx}).data(1,:))) /handles.data.streams.(handles.streamlist{indx}).fs); Ch490=handles.data.streams.(handles.streamlist{indx}).data; EndTime=length(Ch490)-handles.EndBuffer; handles.Fs=handles.data.streams.(handles.streamlist{indx}).fs; handles.Ts=Ts(handles.StartBuffer:EndTime); handles.Ch490=Ch490(handles.StartBuffer:EndTime); end
+        if isfield(handles.data.streams,'x405R'), Ch405=handles.data.streams.x405R.data; handles.Ch405=Ch405(handles.StartBuffer:EndTime);
+        elseif isfield(handles, 'Ch405indx') && ~isempty(handles.Ch405indx), indx=handles.Ch405indx; Ch405=handles.data.streams.(handles.streamlist{indx}).data; handles.Ch405=Ch405(handles.StartBuffer:EndTime);
+        else, [indx,tf]=listdlg('PromptString','Select your control channel:','SelectionMode','single','ListString',handles.streamlist); while tf==0, [indx,tf]=listdlg('PromptString','Select your control channel:','SelectionMode','single','ListString',handles.streamlist); end, handles.Ch405indx=indx; Ch405=handles.data.streams.(handles.streamlist{indx}).data; handles.Ch405=Ch405(handles.StartBuffer:EndTime); end
+        handles.fields = fieldnames(handles.data.epocs); handles.MasterArray=[];
+        for i=1:numel(handles.fields)
+            if handles.fields{i}=="Tick" || handles.fields{i}=="Vid1", epoclist=cell(numel(handles.data.epocs.(handles.fields{i}).data),1); epoclist(:)=handles.fields(i); handles.data.epocs.(handles.fields{i}).data=epoclist; onset=cellfun(@num2str, num2cell(handles.data.epocs.(handles.fields{i}).onset),'un',0); offset=cellfun(@num2str, num2cell(handles.data.epocs.(handles.fields{i}).offset),'un',0); BehData.(handles.fields{i})=[epoclist onset offset]; handles.MasterArray= [handles.MasterArray; BehData.(handles.fields{i})];
+            else, fieldlist=cell(numel(handles.data.epocs.(handles.fields{i}).data),1); fieldlist(:)=handles.fields(i); epoclist=cellfun(@num2str, num2cell(handles.data.epocs.(handles.fields{i}).data), 'un',0); strs=strcat(fieldlist,epoclist); handles.data.epocs.(handles.fields{i}).data=strs; onset=cellfun(@num2str, num2cell(handles.data.epocs.(handles.fields{i}).onset),'un',0); offset=cellfun(@num2str, num2cell(handles.data.epocs.(handles.fields{i}).offset),'un',0); BehData.(handles.fields{i})=[handles.data.epocs.(handles.fields{i}).data onset offset]; handles.MasterArray=[handles.MasterArray; BehData.(handles.fields{i})]; end
+        end
+        if get(handles.Ca2DataCheck,'value') + get(handles.EventDataCheck,'value') + get(handles.SelectedEventDataCheck,'value') >=1, OutputDataButton_Callback(hObject,eventdata,handles); end
+        if get(handles.PlotGCaMPCheck,'value') + get(handles.PlotControlCheck,'value') + get(handles.PlotGCaMPCtrlCheck,'value') + get(handles.PlotGCaMPFitCtrlCheck,'value') + get(handles.PlotDeltaFCheck,'value') +get(handles.PlotDeltaFZScoreCheck,'value') >=1, PlotSaveButton_Callback(hObject,eventdata,handles); end
+        if get(handles.ZScoreCheck,'value') + get(handles.DeltaFCheck,'value') + get(handles.AUCDataCheck,'value') + get(handles.AUCGraphCheck,'value') >=1, PETHContinueButton_Callback(hObject,eventdata,handles); end
+    end
+end
+guidata(hObject,handles);
+end
+% --- Executes on button press in TraceDataCheck.
+function TraceDataCheck_Callback(hObject, eventdata, handles)
+end
+% --- Executes on button press in TrialTraceCheck.
+function TrialTraceCheck_Callback(hObject, eventdata, handles)
+end
+% --- Executes when pmat is resized.
+function pmat_SizeChangedFcn(hObject, eventdata, handles)
+end
+% --- Executes on key press with focus on DataUploadButton and none of its controls.
+function DataUploadButton_KeyPressFcn(hObject, eventdata, handles)
+end
+% --- If Enable == 'on', executes on mouse press in 5 pixel border.
+% --- Otherwise, executes on mouse press in 5 pixel border or over DataUploadButton.
+function DataUploadButton_ButtonDownFcn(hObject, eventdata, handles)
+end
+% --- Executes during object creation, after setting all properties.
+function FilePath_CreateFcn(hObject, eventdata, handles)
+end
+% --- Executes when user attempts to close pmat.
+function pmat_CloseRequestFcn(hObject, eventdata, handles)
+answer = questdlg('Would you like to save your current settings?','Save Settings','Yes','No','Yes');
+if strcmp(answer,'Yes')
+    UserSettings=struct;
+    UserSettings.PreInput=get(handles.PreInput,'String');
+    UserSettings.PostInput=get(handles.PostInput,'String');
+    UserSettings.BL_StartInput=get(handles.BL_StartInput,'String');
+    UserSettings.BL_WidthInput=get(handles.BL_WidthInput,'String');
+    UserSettings.BinInput=get(handles.BinInput,'String');
+    UserSettings.startstop=handles.AUCTable.Data;
+    UserSettings.prefix=get(handles.EditPrefix,'String');
+    UserSettings.ExportEvent=get(handles.ExportEventList,'Value');
+    UserSettings.PETHEvent=get(handles.PETHEventList,'Value');
+    if isfield(handles,'LastFold'), UserSettings.LastFold=handles.LastFold; end
+    UserSettings.CheckboxValues=[];
+    for i=1:numel(handles.Checkboxes), UserSettings.CheckboxValues(i)=get(handles.(handles.Checkboxes{i}),'value'); end
+    if isdir('C:\pmat-BarkerLab'), cd('C:\pmat-BarkerLab'); else, mkdir('C:\pmat-BarkerLab'); cd('C:\pmat-BarkerLab'); end
+    [filename,pathname]=uiputfile('PhotometryUserSettings.mat','Save Workspace Variables As');
+    if pathname~=0, newfilename=fullfile(pathname, filename); save(newfilename, 'UserSettings'); else, msgbox('Settings not saved.','Error','warn'); end
+end
+delete(hObject);
+end
+% --- Executes on button press in CloseAll.
+function CloseAll_Callback(hObject, eventdata, handles)
+fig_h = findobj(0, 'Type', 'Figure');
+for i = 1:length(fig_h)
+    if ~strcmp(get(fig_h(i), 'Tag'), 'pmat')
+        delete(fig_h(i));
+    end
+end
+guidata(hObject,handles);
+end
+% --------------------------------------------------------------------
+function ImportTopMenu_Callback(hObject, eventdata, handles)
+end
+% --------------------------------------------------------------------
+function ImportCSV_Callback(hObject, eventdata, handles)
+% ... (This function is unchanged)
+if isfield(handles,'LastCSVFold')==0
+    [handles.CSVfile, handles.CSVFold]=uigetfile({'*.csv'}, 'Open Recording File');
+    if handles.CSVfile ~= 0, cd(handles.CSVFold), end
+else
+    cd(handles.LastCSVFold)
+    [handles.CSVfile, handles.CSVFold]=uigetfile({'*.csv'}, 'Open Recording File');
+end
+if handles.CSVfile ~= 0
+    handles.LastCSVFold=handles.CSVFold;
+    set(gcf,'Pointer','watch'); drawnow;
+    handles.CSVdata=readtable(strcat(handles.CSVFold,handles.CSVfile));
+    set(gcf,'Pointer','arrow'); drawnow;  
+    prompt={'Number of samples to eliminate at start:', 'Number of samples to eliminate at end:'};
+    definput={'2000','2000'}; dlgtitle='Sample Buffer'; dims=[1 35];
+    BufferInput=inputdlg(prompt,dlgtitle,dims,definput);
+    if isempty(BufferInput), BufferInput={'2000','2000'}; end
+    StartBuffer=str2double(BufferInput{1}); EndBuffer=str2double(BufferInput{2});
+    handles.Ts=table2array(handles.CSVdata(:,1));
+    handles.Fs=(1/(mean(diff(handles.Ts))));
+    EndTime=length(handles.Ts)-EndBuffer;
+    handles.Ts=handles.Ts(StartBuffer:EndTime);
+    handles.Ch490=table2array(handles.CSVdata(StartBuffer:EndTime,2));
+    handles.Ch405=table2array(handles.CSVdata(StartBuffer:EndTime,3));
+end
+if isfield(handles,'LastCSVFold')==0
+    [handles.CSVBeh, handles.CSVFold]=uigetfile({'*.csv'}, 'Open Event/Behavior File');
+     if handles.CSVBeh ~= 0, cd(handles.CSVFold), end
+else
+    cd(handles.LastCSVFold)
+    [handles.CSVBeh, handles.CSVFold]=uigetfile({'*.csv'}, 'Open Event/Behavior File');
+end
+if handles.CSVBeh ~= 0
+    handles.LastCSVFold=handles.CSVFold;
+    try
+        handles.MasterArray=[];
+        set(gcf,'Pointer','watch'); drawnow;
+        handles.CSVBehdata=readtable(strcat(handles.CSVFold,handles.CSVBeh));
+        set(gcf,'Pointer','arrow'); drawnow;   
+        handles.MasterArray=table2cell(handles.CSVBehdata);
+    catch ME, errordlg(ME.message, 'Error Reading File'); end
+end  
+    if ~isempty(handles.MasterArray), handles.BitListStr=cellstr(string(unique(handles.MasterArray(:,1)))); set(handles.PETHEventList,'String',handles.BitListStr); set(handles.ExportEventList,'String',handles.BitListStr); set(handles.PlotEventList,'String',handles.BitListStr, 'Value', 1:numel(handles.BitListStr)); end
+    set(handles.FilePath,'String', handles.CSVFold);
+    set(handles.PETHPanel,'Enable','on'); set(handles.PlotPanel,'Enable','on'); set(handles.DataExportPanel,'Enable','on'); set(handles.NamePrefixPanel,'Enable','on'); set(handles.CopyFilePath,'Enable','on'); set(handles.RunAllButton,'Enable','on'); set(handles.CloseAll,'Enable','on'); set(handles.AUCGraphCheck,'Enable','on');
+    handles.UserPrefix={}; set(handles.EditPrefix,'String',''); set(handles.PETHNameInput,'String','ex. Shock, Tone, etc.');
+    handles.subjectID=[]; handles.DataType="Single";
+guidata(hObject,handles);
+end
+% --------------------------------------------------------------------
+function AppendBeh_Callback(hObject, eventdata, handles)
+% ... (This function is unchanged)
+if isfield(handles,'LastCSVFold')==0, [handles.CSVAppend, handles.CSVFold]=uigetfile({'*.csv'}, 'Append Event Data');
+else, cd(handles.LastCSVFold); [handles.CSVAppend, handles.CSVFold]=uigetfile({'*.csv'}, 'Append Event Data'); end
+if handles.CSVAppend ~= 0
+    handles.LastCSVFold = handles.CSVFold;
+    set(gcf,'Pointer','watch'); drawnow;
+    try, handles.CSVAppendData=readtable(strcat(handles.CSVFold,handles.CSVAppend)); catch ME, errordlg(ME.message, 'Error Reading File'); end
+    set(gcf,'Pointer','arrow'); drawnow;   
+    if isfield(handles,'MasterArray'), handles.MasterArray=[handles.MasterArray ;table2cell(handles.CSVAppendData)]; else, msgbox("The Main data file must be loaded before appending event data", 'Error','warn'); end
+end
+if isfield(handles, 'MasterArray') && ~isempty(handles.MasterArray), handles.BitListStr=cellstr(string(unique(handles.MasterArray(:,1)))); set(handles.PETHEventList,'String',handles.BitListStr); set(handles.ExportEventList,'String',handles.BitListStr); set(handles.PlotEventList,'String',handles.BitListStr, 'Value', 1:numel(handles.BitListStr)); end
+guidata(hObject,handles);
+end
+% --- Executes during object creation, after setting all properties.
+function axes2_CreateFcn(hObject, eventdata, handles)
+end
+end
